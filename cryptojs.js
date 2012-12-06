@@ -1,4 +1,4 @@
-var Crypto = exports.Crypto = require('./lib/Crypto').Crypto;
+var Crypto = exports.Crypto = require('./src/Crypto').Crypto;
 
 [ 'CryptoMath'
 , 'BlockModes'
@@ -13,5 +13,5 @@ var Crypto = exports.Crypto = require('./lib/Crypto').Crypto;
 , 'SHA1'
 , 'SHA256'
 ].forEach( function (path) {
-	require('./lib/' + path);
+	require('./src/' + path);
 });
