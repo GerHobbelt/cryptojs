@@ -51,7 +51,7 @@
      */
     var SHA256 = C_algo.SHA256 = Hasher.extend({
         _doReset: function () {
-            this._hash = WordArray.create(H.slice(0));
+            this._hash = new WordArray.init(H.slice(0));
         },
 
         _doProcessBlock: function (M, offset) {
@@ -132,6 +132,16 @@
 
             // Hash final blocks
             this._process();
+
+            // Return final computed hash
+            return this._hash;
+        },
+
+        clone: function () {
+            var clone = Hasher.clone.call(this);
+            clone._hash = this._hash.clone();
+
+            return clone;
         }
     });
 

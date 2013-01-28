@@ -14,7 +14,7 @@
      */
     var SHA1 = C_algo.SHA1 = Hasher.extend({
         _doReset: function () {
-            this._hash = WordArray.create([
+            this._hash = new WordArray.init([
                 0x67452301, 0xefcdab89,
                 0x98badcfe, 0x10325476,
                 0xc3d2e1f0
@@ -83,6 +83,16 @@
 
             // Hash final blocks
             this._process();
+
+            // Return final computed hash
+            return this._hash;
+        },
+
+        clone: function () {
+            var clone = Hasher.clone.call(this);
+            clone._hash = this._hash.clone();
+
+            return clone;
         }
     });
 

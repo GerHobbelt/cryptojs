@@ -21,7 +21,7 @@
      */
     var MD5 = C_algo.MD5 = Hasher.extend({
         _doReset: function () {
-            this._hash = WordArray.create([
+            this._hash = new WordArray.init([
                 0x67452301, 0xefcdab89,
                 0x98badcfe, 0x10325476
             ]);
@@ -169,8 +169,9 @@
             // Hash final blocks
             this._process();
 
-            // Shortcut
-            var H = this._hash.words;
+            // Shortcuts
+            var hash = this._hash;
+            var H = hash.words;
 
             // Swap endian
             for (var i = 0; i < 4; i++) {
@@ -180,6 +181,16 @@
                 H[i] = (((H_i << 8)  | (H_i >>> 24)) & 0x00ff00ff) |
                        (((H_i << 24) | (H_i >>> 8))  & 0xff00ff00);
             }
+
+            // Return final computed hash
+            return hash;
+        },
+
+        clone: function () {
+            var clone = Hasher.clone.call(this);
+            clone._hash = this._hash.clone();
+
+            return clone;
         }
     });
 

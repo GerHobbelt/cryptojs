@@ -1,6 +1,6 @@
 (function () {
-    // Check if typed arrays are supported
-    if (typeof ArrayBuffer != 'function') {
+    // Ensure typed arrays are supported before proceeding
+    if (typeof ArrayBuffer === 'undefined') {
         return;
     }
 
@@ -10,20 +10,22 @@
     var WordArray = C_lib.WordArray;
 
     // Reference original init
-    var $superInit = WordArray.init;
+    var superInit = WordArray.init;
 
     // Augment WordArray.init to handle typed arrays
-    WordArray.init = function (typedArray) {
-        // Convert buffers to data view
+    var subInit = WordArray.init = function (typedArray) {
+        // Convert buffers to uint8
         if (typedArray instanceof ArrayBuffer) {
-            typedArray = new DataView(typedArray);
+            typedArray = new Uint8Array(typedArray);
         }
 
-        // Convert array views to data view
+        // Convert other array views to uint8
         if (
             typedArray instanceof Int8Array ||
-            typedArray instanceof Uint8Array ||
-            typedArray instanceof Uint8ClampedArray ||
+            ( // Safari doesn't seem to support Uint8ClampedArray yet
+                typeof Uint8ClampedArray !== 'undefined' &&
+                typedArray instanceof Uint8ClampedArray
+            ) ||
             typedArray instanceof Int16Array ||
             typedArray instanceof Uint16Array ||
             typedArray instanceof Int32Array ||
@@ -31,22 +33,27 @@
             typedArray instanceof Float32Array ||
             typedArray instanceof Float64Array
         ) {
-            typedArray = new DataView(typedArray.buffer);
+            typedArray = new Uint8Array(typedArray.buffer, typedArray.byteOffset, typedArray.byteLength);
         }
 
-        // Handle data views
-        if (typedArray instanceof DataView) {
+        // Handle Uint8Array
+        if (typedArray instanceof Uint8Array) {
+            // Shortcut
             var typedArrayByteLength = typedArray.byteLength;
 
+            // Extract bytes
             var words = [];
             for (var i = 0; i < typedArrayByteLength; i++) {
-                words[i >>> 2] |= typedArray.getUint8(i) << (24 - (i % 4) * 8);
+                words[i >>> 2] |= typedArray[i] << (24 - (i % 4) * 8);
             }
 
-            $superInit.call(this, words, typedArrayByteLength);
+            // Initialize this word array
+            superInit.call(this, words, typedArrayByteLength);
         } else {
             // Else call normal init
-            $superInit.apply(this, arguments);
+            superInit.apply(this, arguments);
         }
     };
+
+    subInit.prototype = WordArray;
 }());
