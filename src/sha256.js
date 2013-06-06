@@ -1,167 +1,130 @@
-(function (Math) {
-    /*global CryptoJS:true */
+(function(){
 
-    'use strict';
+var C = (typeof window === 'undefined') ? require('./Crypto').Crypto : window.Crypto;
 
-    // Shortcuts
-    var C = CryptoJS;
-    var C_LIB = C.lib;
-    var WordArray = C_LIB.WordArray;
-    var Hasher = C_LIB.Hasher;
+// Shortcuts
+var util = C.util,
+    charenc = C.charenc,
+    UTF8 = charenc.UTF8,
+    Binary = charenc.Binary;
 
-    // Constants tables
-    var STATE = [];
-    var ROUND_CONSTANTS = [];
+// Constants
+var K = [ 0x428A2F98, 0x71374491, 0xB5C0FBCF, 0xE9B5DBA5,
+          0x3956C25B, 0x59F111F1, 0x923F82A4, 0xAB1C5ED5,
+          0xD807AA98, 0x12835B01, 0x243185BE, 0x550C7DC3,
+          0x72BE5D74, 0x80DEB1FE, 0x9BDC06A7, 0xC19BF174,
+          0xE49B69C1, 0xEFBE4786, 0x0FC19DC6, 0x240CA1CC,
+          0x2DE92C6F, 0x4A7484AA, 0x5CB0A9DC, 0x76F988DA,
+          0x983E5152, 0xA831C66D, 0xB00327C8, 0xBF597FC7,
+          0xC6E00BF3, 0xD5A79147, 0x06CA6351, 0x14292967,
+          0x27B70A85, 0x2E1B2138, 0x4D2C6DFC, 0x53380D13,
+          0x650A7354, 0x766A0ABB, 0x81C2C92E, 0x92722C85,
+          0xA2BFE8A1, 0xA81A664B, 0xC24B8B70, 0xC76C51A3,
+          0xD192E819, 0xD6990624, 0xF40E3585, 0x106AA070,
+          0x19A4C116, 0x1E376C08, 0x2748774C, 0x34B0BCB5,
+          0x391C0CB3, 0x4ED8AA4A, 0x5B9CCA4F, 0x682E6FF3,
+          0x748F82EE, 0x78A5636F, 0x84C87814, 0x8CC70208,
+          0x90BEFFFA, 0xA4506CEB, 0xBEF9A3F7, 0xC67178F2 ];
 
-    // Compute constants
-    (function () {
-        function isPrime(n) {
-            var sqrtN = Math.sqrt(n);
-            for (var factor = 2; factor <= sqrtN; factor++) {
-                if (n % factor === 0) {
-                    return false;
-                }
-            }
+// Public API
+var SHA256 = C.SHA256 = function (message, options) {
+	var digestbytes = util.wordsToBytes(SHA256._sha256(message));
+	return options && options.asBytes ? digestbytes :
+	       options && options.asString ? Binary.bytesToString(digestbytes) :
+	       util.bytesToHex(digestbytes);
+};
 
-            return true;
-        }
+// The core
+SHA256._sha256 = function (message) {
 
-        function getFractionalBits(n) {
-            return ((n - (n | 0)) * 0x100000000) | 0;
-        }
+	// Convert to byte array
+	if (message.constructor == String) message = UTF8.stringToBytes(message);
+	/* else, assume byte array already */
 
-        var n = 2, nPrime = 0;
-        while (nPrime < 64) {
-            if (isPrime(n)) {
-                if (nPrime < 8) {
-                    STATE[nPrime] = getFractionalBits(Math.pow(n, 1 / 2));
-                }
-                ROUND_CONSTANTS[nPrime] = getFractionalBits(Math.pow(n, 1 / 3));
+	var m = util.bytesToWords(message),
+	    l = message.length * 8,
+	    H = [ 0x6A09E667, 0xBB67AE85, 0x3C6EF372, 0xA54FF53A,
+	          0x510E527F, 0x9B05688C, 0x1F83D9AB, 0x5BE0CD19 ],
+	    w = [],
+	    a, b, c, d, e, f, g, h, i, j,
+	    t1, t2;
 
-                nPrime++;
-            }
+	// Padding
+	m[l >> 5] |= 0x80 << (24 - l % 32);
+	m[((l + 64 >> 9) << 4) + 15] = l;
 
-            n++;
-        }
-    }());
+	for (var i = 0; i < m.length; i += 16) {
 
-    // Reusable object for expanded message
-    var M = [];
+		a = H[0];
+		b = H[1];
+		c = H[2];
+		d = H[3];
+		e = H[4];
+		f = H[5];
+		g = H[6];
+		h = H[7];
 
-    /**
-     * SHA-256 hash algorithm.
-     */
-    var SHA256 = C.SHA256 = Hasher.extend({
-        _doInit: function () {
-        },
+		for (var j = 0; j < 64; j++) {
 
-        _doReset: function () {
-            this._state = STATE.slice(0);
-        },
+			if (j < 16) w[j] = m[j + i];
+			else {
 
-        _doProcessBlock: function (m) {
-            // Shortcuts
-            var s = this._state;
-            var s0 = s[0];
-            var s1 = s[1];
-            var s2 = s[2];
-            var s3 = s[3];
-            var s4 = s[4];
-            var s5 = s[5];
-            var s6 = s[6];
-            var s7 = s[7];
-            var _s0 = s0;
-            var _s1 = s1;
-            var _s2 = s2;
-            var _s3 = s3;
-            var _s4 = s4;
-            var _s5 = s5;
-            var _s6 = s6;
-            var _s7 = s7;
+				var gamma0x = w[j - 15],
+				    gamma1x = w[j - 2],
+				    gamma0  = ((gamma0x << 25) | (gamma0x >>>  7)) ^
+				              ((gamma0x << 14) | (gamma0x >>> 18)) ^
+				               (gamma0x >>> 3),
+				    gamma1  = ((gamma1x <<  15) | (gamma1x >>> 17)) ^
+				              ((gamma1x <<  13) | (gamma1x >>> 19)) ^
+				               (gamma1x >>> 10);
 
-            // Rounds
-            for (var round = 0; round < 64; round++) {
-                // Expand message
-                if (round < 16) {
-                    var MRound = m[round];
-                } else {
-                    var gamma0x = M[round - 15];
-                    var gamma1x = M[round - 2];
-                    var MRound = (
-                        M[round - 7] + M[round - 16] + (
-                            ((gamma0x << 25) | (gamma0x >>> 7))  ^
-                            ((gamma0x << 14) | (gamma0x >>> 18)) ^
-                            (gamma0x >>> 3)
-                        ) + (
-                            ((gamma1x << 15) | (gamma1x >>> 17)) ^
-                            ((gamma1x << 13) | (gamma1x >>> 19)) ^
-                            (gamma1x >>> 10)
-                        )
-                    );
-                }
-                M[round] = MRound |= 0;
+				w[j] = gamma0 + (w[j - 7] >>> 0) +
+				       gamma1 + (w[j - 16] >>> 0);
 
-                // Computation
-                var t1 = (
-                    (((s4 << 26) | (s4 >>> 6)) ^ ((s4 << 21) | (s4 >>> 11)) ^ ((s4 << 7)  | (s4 >>> 25))) +
-                    ((s4 & s5) ^ (~s4 & s6)) + s7 + MRound + ROUND_CONSTANTS[round]
-                );
-                var t2 = (
-                    (((s0 << 30) | (s0 >>> 2)) ^ ((s0 << 19) | (s0 >>> 13)) ^ ((s0 << 10) | (s0 >>> 22))) +
-                    ((s0 & s1) ^ (s0 & s2) ^ (s1 & s2))
-                );
+			}
 
-                // Update working state
-                s7 = s6;
-                s6 = s5;
-                s5 = s4;
-                s4 = (s3 + t1) | 0;
-                s3 = s2;
-                s2 = s1;
-                s1 = s0;
-                s0 = (t1 + t2) | 0;
-            }
+			var ch  = e & f ^ ~e & g,
+			    maj = a & b ^ a & c ^ b & c,
+			    sigma0 = ((a << 30) | (a >>>  2)) ^
+			             ((a << 19) | (a >>> 13)) ^
+			             ((a << 10) | (a >>> 22)),
+			    sigma1 = ((e << 26) | (e >>>  6)) ^
+			             ((e << 21) | (e >>> 11)) ^
+			             ((e <<  7) | (e >>> 25));
 
-            // Update state
-            s[0] = (_s0 + s0) | 0;
-            s[1] = (_s1 + s1) | 0;
-            s[2] = (_s2 + s2) | 0;
-            s[3] = (_s3 + s3) | 0;
-            s[4] = (_s4 + s4) | 0;
-            s[5] = (_s5 + s5) | 0;
-            s[6] = (_s6 + s6) | 0;
-            s[7] = (_s7 + s7) | 0;
-        },
 
-        _doFinalize: function () {
-            // Shortcuts
-            var data = this._data;
-            var dataWords = data.words;
-            var nBitsLeft = data.sigBytes * 8;
-            var nBitsTotalLsw = this._nDataBitsLsw;
-            var nBitsTotalMsw = this._nDataBitsMsw;
+			t1 = (h >>> 0) + sigma1 + ch + (K[j]) + (w[j] >>> 0);
+			t2 = sigma0 + maj;
 
-            // Add padding
-            dataWords[nBitsLeft >>> 5] |= 0x80 << (24 - nBitsLeft % 32);
+			h = g;
+			g = f;
+			f = e;
+			e = (d + t1) >>> 0;
+			d = c;
+			c = b;
+			b = a;
+			a = (t1 + t2) >>> 0;
 
-            var lengthStartIndex = (((nBitsLeft + 64) >>> 9) << 4) + 14;
-            dataWords[lengthStartIndex] = nBitsTotalMsw;
-            dataWords[lengthStartIndex + 1] = nBitsTotalLsw;
+		}
 
-            data.sigBytes = dataWords.length * 4;
+		H[0] += a;
+		H[1] += b;
+		H[2] += c;
+		H[3] += d;
+		H[4] += e;
+		H[5] += f;
+		H[6] += g;
+		H[7] += h;
 
-            // Hash final blocks
-            this._process();
+	}
 
-            // Return final hash
-            return new WordArray(this._state);
-        },
+	return H;
 
-        clone: function () {
-            var clone = SHA256.$super.prototype.clone.call(this);
-            clone._state = clone._state.slice(0);
+};
 
-            return clone;
-        }
-    });
-}(Math));
+// Package private blocksize
+SHA256._blocksize = 16;
+
+SHA256._digestsize = 32;
+
+})();

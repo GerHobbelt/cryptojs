@@ -1,198 +1,158 @@
-(function (Math) {
-    /*global CryptoJS:true */
+(function(){
 
-    'use strict';
+var C = (typeof window === 'undefined') ? require('./Crypto').Crypto : window.Crypto;
 
-    // Shortcuts
-    var C = CryptoJS;
-    var C_LIB = C.lib;
-    var WordArray = C_LIB.WordArray;
-    var Hasher = C_LIB.Hasher;
+// Shortcuts
+var util = C.util,
+    charenc = C.charenc,
+    UTF8 = charenc.UTF8,
+    Binary = charenc.Binary;
 
-    // Constants tables
-    var ROUND_CONSTANTS  = [];
-    var ROTATION_OFFSETS = [7, 12, 17, 22, 5, 9, 14, 20, 4, 11, 16, 23, 6, 10, 15, 21];
+// Public API
+var MD5 = C.MD5 = function (message, options) {
+	var digestbytes = util.wordsToBytes(MD5._md5(message));
+	return options && options.asBytes ? digestbytes :
+	       options && options.asString ? Binary.bytesToString(digestbytes) :
+	       util.bytesToHex(digestbytes);
+};
 
-    // Compute round constants
-    (function () {
-        for (var i = 0; i < 64; i++) {
-            ROUND_CONSTANTS[i] = (Math.abs(Math.sin(i + 1)) * 0x100000000) | 0;
-        }
-    }());
+// The core
+MD5._md5 = function (message) {
 
-    /**
-     * MD5 hash algorithm.
-     */
-    var MD5 = C.MD5 = Hasher.extend({
-        _doInit: function () {
-        },
+	// Convert to byte array
+	if (message.constructor == String) message = UTF8.stringToBytes(message);
+	/* else, assume byte array already */
 
-        _doReset: function () {
-            this._state = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476];
-        },
+	var m = util.bytesToWords(message),
+	    l = message.length * 8,
+	    a =  1732584193,
+	    b = -271733879,
+	    c = -1732584194,
+	    d =  271733878;
 
-        _doProcessBlock: function (m) {
-            // Swap endian
-            for (var i = 0; i < 16; i++) {
-                var word = m[i];
-                m[i] = (
-                    (((word << 8)  | (word >>> 24)) & 0x00ff00ff) |
-                    (((word << 24) | (word >>> 8))  & 0xff00ff00)
-                );
-            }
+	// Swap endian
+	for (var i = 0; i < m.length; i++) {
+		m[i] = ((m[i] <<  8) | (m[i] >>> 24)) & 0x00FF00FF |
+		       ((m[i] << 24) | (m[i] >>>  8)) & 0xFF00FF00;
+	}
 
-            // Shortcuts
-            var s = this._state;
-            var s0 = s[0];
-            var s1 = s[1];
-            var s2 = s[2];
-            var s3 = s[3];
-            var _s0 = s0;
-            var _s1 = s1;
-            var _s2 = s2;
-            var _s3 = s3;
+	// Padding
+	m[l >>> 5] |= 0x80 << (l % 32);
+	m[(((l + 64) >>> 9) << 4) + 14] = l;
 
-            // Rounds
-            for (var round = 0; round < 64; round++) {
-                // Inline round 1
-                {
-                    if (round < 16) {
-                        var f = (s1 & s2) | (~s1 & s3);
-                        var mIndex = round;
-                    } else if (round < 32) {
-                        var f = (s1 & s3) | (s2 & ~s3);
-                        var mIndex = round * 5 + 1;
-                    } else if (round < 48) {
-                        var f = s1 ^ s2 ^ s3;
-                        var mIndex = round * 3 + 5;
-                    } else {
-                        var f = s2 ^ (s1 | ~s3);
-                        var mIndex = round * 7;
-                    }
+	// Method shortcuts
+	var FF = MD5._ff,
+	    GG = MD5._gg,
+	    HH = MD5._hh,
+	    II = MD5._ii;
 
-                    var t = f + s0 + m[mIndex % 16] + ROUND_CONSTANTS[round];
-                    var rotationOffset = ROTATION_OFFSETS[((round >>> 2) & 0xc) | (round & 0x3)];
-                    s0 = (s1 + ((t << rotationOffset) | (t >>> (32 - rotationOffset)))) | 0;
-                }
+	for (var i = 0; i < m.length; i += 16) {
 
-                // Inline round 2
-                {
-                    if (++round < 16) {
-                        var f = (s0 & s1) | (~s0 & s2);
-                        var mIndex = round;
-                    } else if (round < 32) {
-                        var f = (s0 & s2) | (s1 & ~s2);
-                        var mIndex = round * 5 + 1;
-                    } else if (round < 48) {
-                        var f = s0 ^ s1 ^ s2;
-                        var mIndex = round * 3 + 5;
-                    } else {
-                        var f = s1 ^ (s0 | ~s2);
-                        var mIndex = round * 7;
-                    }
+		var aa = a,
+		    bb = b,
+		    cc = c,
+		    dd = d;
 
-                    var t = f + s3 + m[mIndex % 16] + ROUND_CONSTANTS[round];
-                    var rotationOffset = ROTATION_OFFSETS[((round >>> 2) & 0xc) | (round & 0x3)];
-                    s3 = (s0 + ((t << rotationOffset) | (t >>> (32 - rotationOffset)))) | 0;
-                }
+		a = FF(a, b, c, d, m[i+ 0],  7, -680876936);
+		d = FF(d, a, b, c, m[i+ 1], 12, -389564586);
+		c = FF(c, d, a, b, m[i+ 2], 17,  606105819);
+		b = FF(b, c, d, a, m[i+ 3], 22, -1044525330);
+		a = FF(a, b, c, d, m[i+ 4],  7, -176418897);
+		d = FF(d, a, b, c, m[i+ 5], 12,  1200080426);
+		c = FF(c, d, a, b, m[i+ 6], 17, -1473231341);
+		b = FF(b, c, d, a, m[i+ 7], 22, -45705983);
+		a = FF(a, b, c, d, m[i+ 8],  7,  1770035416);
+		d = FF(d, a, b, c, m[i+ 9], 12, -1958414417);
+		c = FF(c, d, a, b, m[i+10], 17, -42063);
+		b = FF(b, c, d, a, m[i+11], 22, -1990404162);
+		a = FF(a, b, c, d, m[i+12],  7,  1804603682);
+		d = FF(d, a, b, c, m[i+13], 12, -40341101);
+		c = FF(c, d, a, b, m[i+14], 17, -1502002290);
+		b = FF(b, c, d, a, m[i+15], 22,  1236535329);
 
-                // Inline round 3
-                {
-                    if (++round < 16) {
-                        var f = (s3 & s0) | (~s3 & s1);
-                        var mIndex = round;
-                    } else if (round < 32) {
-                        var f = (s3 & s1) | (s0 & ~s1);
-                        var mIndex = round * 5 + 1;
-                    } else if (round < 48) {
-                        var f = s3 ^ s0 ^ s1;
-                        var mIndex = round * 3 + 5;
-                    } else {
-                        var f = s0 ^ (s3 | ~s1);
-                        var mIndex = round * 7;
-                    }
+		a = GG(a, b, c, d, m[i+ 1],  5, -165796510);
+		d = GG(d, a, b, c, m[i+ 6],  9, -1069501632);
+		c = GG(c, d, a, b, m[i+11], 14,  643717713);
+		b = GG(b, c, d, a, m[i+ 0], 20, -373897302);
+		a = GG(a, b, c, d, m[i+ 5],  5, -701558691);
+		d = GG(d, a, b, c, m[i+10],  9,  38016083);
+		c = GG(c, d, a, b, m[i+15], 14, -660478335);
+		b = GG(b, c, d, a, m[i+ 4], 20, -405537848);
+		a = GG(a, b, c, d, m[i+ 9],  5,  568446438);
+		d = GG(d, a, b, c, m[i+14],  9, -1019803690);
+		c = GG(c, d, a, b, m[i+ 3], 14, -187363961);
+		b = GG(b, c, d, a, m[i+ 8], 20,  1163531501);
+		a = GG(a, b, c, d, m[i+13],  5, -1444681467);
+		d = GG(d, a, b, c, m[i+ 2],  9, -51403784);
+		c = GG(c, d, a, b, m[i+ 7], 14,  1735328473);
+		b = GG(b, c, d, a, m[i+12], 20, -1926607734);
 
-                    var t = f + s2 + m[mIndex % 16] + ROUND_CONSTANTS[round];
-                    var rotationOffset = ROTATION_OFFSETS[((round >>> 2) & 0xc) | (round & 0x3)];
-                    s2 = (s3 + ((t << rotationOffset) | (t >>> (32 - rotationOffset)))) | 0;
-                }
+		a = HH(a, b, c, d, m[i+ 5],  4, -378558);
+		d = HH(d, a, b, c, m[i+ 8], 11, -2022574463);
+		c = HH(c, d, a, b, m[i+11], 16,  1839030562);
+		b = HH(b, c, d, a, m[i+14], 23, -35309556);
+		a = HH(a, b, c, d, m[i+ 1],  4, -1530992060);
+		d = HH(d, a, b, c, m[i+ 4], 11,  1272893353);
+		c = HH(c, d, a, b, m[i+ 7], 16, -155497632);
+		b = HH(b, c, d, a, m[i+10], 23, -1094730640);
+		a = HH(a, b, c, d, m[i+13],  4,  681279174);
+		d = HH(d, a, b, c, m[i+ 0], 11, -358537222);
+		c = HH(c, d, a, b, m[i+ 3], 16, -722521979);
+		b = HH(b, c, d, a, m[i+ 6], 23,  76029189);
+		a = HH(a, b, c, d, m[i+ 9],  4, -640364487);
+		d = HH(d, a, b, c, m[i+12], 11, -421815835);
+		c = HH(c, d, a, b, m[i+15], 16,  530742520);
+		b = HH(b, c, d, a, m[i+ 2], 23, -995338651);
 
-                // Inline round 4
-                {
-                    if (++round < 16) {
-                        var f = (s2 & s3) | (~s2 & s0);
-                        var mIndex = round;
-                    } else if (round < 32) {
-                        var f = (s2 & s0) | (s3 & ~s0);
-                        var mIndex = round * 5 + 1;
-                    } else if (round < 48) {
-                        var f = s2 ^ s3 ^ s0;
-                        var mIndex = round * 3 + 5;
-                    } else {
-                        var f = s3 ^ (s2 | ~s0);
-                        var mIndex = round * 7;
-                    }
+		a = II(a, b, c, d, m[i+ 0],  6, -198630844);
+		d = II(d, a, b, c, m[i+ 7], 10,  1126891415);
+		c = II(c, d, a, b, m[i+14], 15, -1416354905);
+		b = II(b, c, d, a, m[i+ 5], 21, -57434055);
+		a = II(a, b, c, d, m[i+12],  6,  1700485571);
+		d = II(d, a, b, c, m[i+ 3], 10, -1894986606);
+		c = II(c, d, a, b, m[i+10], 15, -1051523);
+		b = II(b, c, d, a, m[i+ 1], 21, -2054922799);
+		a = II(a, b, c, d, m[i+ 8],  6,  1873313359);
+		d = II(d, a, b, c, m[i+15], 10, -30611744);
+		c = II(c, d, a, b, m[i+ 6], 15, -1560198380);
+		b = II(b, c, d, a, m[i+13], 21,  1309151649);
+		a = II(a, b, c, d, m[i+ 4],  6, -145523070);
+		d = II(d, a, b, c, m[i+11], 10, -1120210379);
+		c = II(c, d, a, b, m[i+ 2], 15,  718787259);
+		b = II(b, c, d, a, m[i+ 9], 21, -343485551);
 
-                    var t = f + s1 + m[mIndex % 16] + ROUND_CONSTANTS[round];
-                    var rotationOffset = ROTATION_OFFSETS[((round >>> 2) & 0xc) | (round & 0x3)];
-                    s1 = (s2 + ((t << rotationOffset) | (t >>> (32 - rotationOffset)))) | 0;
-                }
-            }
+		a = (a + aa) >>> 0;
+		b = (b + bb) >>> 0;
+		c = (c + cc) >>> 0;
+		d = (d + dd) >>> 0;
 
-            // Update state
-            s[0] = (_s0 + s0) | 0;
-            s[1] = (_s1 + s1) | 0;
-            s[2] = (_s2 + s2) | 0;
-            s[3] = (_s3 + s3) | 0;
-        },
+	}
 
-        _doFinalize: function () {
-            // Shortcuts
-            var data = this._data;
-            var dataWords = data.words;
-            var nBitsLeft = data.sigBytes * 8;
-            var nBitsTotalMsw = this._nDataBitsMsw;
-            var nBitsTotalLsw = this._nDataBitsLsw;
+	return util.endian([a, b, c, d]);
 
-            // Add padding
-            dataWords[nBitsLeft >>> 5] |= 0x80 << (24 - nBitsLeft % 32);
+};
 
-            var lengthStartIndex = (((nBitsLeft + 64) >>> 9) << 4) + 14;
-            dataWords[lengthStartIndex] = (
-                (((nBitsTotalLsw << 8)  | (nBitsTotalLsw >>> 24)) & 0x00ff00ff) |
-                (((nBitsTotalLsw << 24) | (nBitsTotalLsw >>> 8))  & 0xff00ff00)
-            );
-            dataWords[lengthStartIndex + 1] = (
-                (((nBitsTotalMsw << 8)  | (nBitsTotalMsw >>> 24)) & 0x00ff00ff) |
-                (((nBitsTotalMsw << 24) | (nBitsTotalMsw >>> 8))  & 0xff00ff00)
-            );
+// Auxiliary functions
+MD5._ff  = function (a, b, c, d, x, s, t) {
+	var n = a + (b & c | ~b & d) + (x >>> 0) + t;
+	return ((n << s) | (n >>> (32 - s))) + b;
+};
+MD5._gg  = function (a, b, c, d, x, s, t) {
+	var n = a + (b & d | c & ~d) + (x >>> 0) + t;
+	return ((n << s) | (n >>> (32 - s))) + b;
+};
+MD5._hh  = function (a, b, c, d, x, s, t) {
+	var n = a + (b ^ c ^ d) + (x >>> 0) + t;
+	return ((n << s) | (n >>> (32 - s))) + b;
+};
+MD5._ii  = function (a, b, c, d, x, s, t) {
+	var n = a + (c ^ (b | ~d)) + (x >>> 0) + t;
+	return ((n << s) | (n >>> (32 - s))) + b;
+};
 
-            data.sigBytes = dataWords.length * 4;
+// Package private blocksize
+MD5._blocksize = 16;
 
-            // Hash final blocks
-            this._process();
+MD5._digestsize = 16;
 
-            // Shortcut
-            var s = this._state;
-
-            // Swap endian
-            for (var i = 0; i < 4; i++) {
-                var word = s[i];
-                s[i] = (
-                    (((word << 8)  | (word >>> 24)) & 0x00ff00ff) |
-                    (((word << 24) | (word >>> 8))  & 0xff00ff00)
-                );
-            }
-
-            // Return final hash
-            return new WordArray(s);
-        },
-
-        clone: function () {
-            var clone = MD5.$super.prototype.clone.call(this);
-            clone._state = clone._state.slice(0);
-
-            return clone;
-        }
-    });
-}(Math));
+})();
